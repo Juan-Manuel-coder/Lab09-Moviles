@@ -33,6 +33,9 @@ import androidx.navigation.navArgument
 import com.example.lab09.ui.theme.Lab09Theme
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.runtime.*
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,18 +51,23 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun ProgPrincipal9() {
-    val urlBase = "https://json-placeholder.mock.beeceptor.com/"
+    // Cambiamos a la URL de DummyJSON
+    val urlBase = "https://dummyjson.com/"
     val retrofit = Retrofit.Builder()
         .baseUrl(urlBase)
         .addConverterFactory(GsonConverterFactory.create())
         .build()
-    val servicio = retrofit.create(PostApiService::class.java)
+
+    // Creamos AMBOS servicios
+    val servicioPosts = retrofit.create(PostApiService::class.java)
+    val servicioProductos = retrofit.create(ProductApiService::class.java)
     val navController = rememberNavController()
 
     Scaffold(
         topBar = { BarraSuperior() },
         bottomBar = { BarraInferior(navController) },
-        content = { paddingValues -> Contenido(paddingValues, navController, servicio) }
+        // Pasamos ambos servicios al contenido
+        content = { paddingValues -> Contenido(paddingValues, navController, servicioPosts, servicioProductos) }
     )
 }
 
@@ -82,9 +90,7 @@ fun BarraSuperior() {
 
 @Composable
 fun BarraInferior(navController: NavHostController) {
-    NavigationBar(
-        containerColor = Color.LightGray
-    ) {
+    NavigationBar(containerColor = Color.LightGray) {
         NavigationBarItem(
             icon = { Icon(Icons.Outlined.Home, contentDescription = "Inicio") },
             label = { Text("Inicio") },
@@ -97,30 +103,51 @@ fun BarraInferior(navController: NavHostController) {
             selected = navController.currentDestination?.route == "posts",
             onClick = { navController.navigate("posts") }
         )
+        // NUEVO BOTÓN DE PRODUCTOS
+        NavigationBarItem(
+            icon = { Icon(Icons.Filled.ShoppingCart, contentDescription = "Productos") },
+            label = { Text("Productos") },
+            selected = navController.currentDestination?.route == "productos",
+            onClick = { navController.navigate("productos") }
+        )
     }
 }
-
 @Composable
 fun Contenido(
     pv: PaddingValues,
     navController: NavHostController,
-    servicio: PostApiService
+    servicioPosts: PostApiService,
+    servicioProductos: ProductApiService
 ) {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(pv)
+        modifier = Modifier.fillMaxSize().padding(pv)
     ) {
         NavHost(
             navController = navController,
             startDestination = "inicio"
         ) {
             composable("inicio") { ScreenInicio() }
-            composable("posts") { ScreenPosts(navController, servicio) }
+            composable("posts") { ScreenPosts(navController, servicioPosts) }
+            composable("productos") { ScreenProducts(servicioProductos, navController) }
+            composable("carrito") { ScreenCart(navController) }
+            composable("productoDetalle/{id}", arguments = listOf(
+                navArgument("id") { type = NavType.IntType }
+            )) { backStackEntry ->
+                val id = backStackEntry.arguments!!.getInt("id")
+                var productoSeleccionado by remember { mutableStateOf<ProductModel?>(null) }
+                LaunchedEffect(Unit) {
+                    val respuesta = servicioProductos.getProducts()
+                    productoSeleccionado = respuesta.products.find { it.id == id }
+                }
+                if (productoSeleccionado != null) {
+                    ScreenProductDetail(productoSeleccionado!!, navController)
+                }
+            }
+
             composable("postsVer/{id}", arguments = listOf(
                 navArgument("id") { type = NavType.IntType }
             )) {
-                ScreenPost(navController, servicio, it.arguments!!.getInt("id"))
+                ScreenPost(navController, servicioPosts, it.arguments!!.getInt("id"))
             }
         }
     }
