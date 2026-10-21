@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -21,6 +23,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -33,9 +40,6 @@ import androidx.navigation.navArgument
 import com.example.lab09.ui.theme.Lab09Theme
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.runtime.*
-
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,23 +55,33 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun ProgPrincipal9() {
-    // Cambiamos a la URL de DummyJSON
-    val urlBase = "https://dummyjson.com/"
-    val retrofit = Retrofit.Builder()
-        .baseUrl(urlBase)
+    // 1. Retrofit para DummyJSON (Posts y Productos)
+    val urlBaseDummy = "https://dummyjson.com/"
+    val retrofitDummy = Retrofit.Builder()
+        .baseUrl(urlBaseDummy)
         .addConverterFactory(GsonConverterFactory.create())
         .build()
 
-    // Creamos AMBOS servicios
-    val servicioPosts = retrofit.create(PostApiService::class.java)
-    val servicioProductos = retrofit.create(ProductApiService::class.java)
+    // 2. Retrofit para Anfibios (Usando la URL alternativa de GitHub)
+    val urlBaseAnfibios = "https://android-kotlin-fun-mars-server.appspot.com/"
+    val retrofitAnfibios = Retrofit.Builder()
+        .baseUrl(urlBaseAnfibios)
+        .addConverterFactory(GsonConverterFactory.create())
+        .build()
+
+    // Creamos los servicios
+    val servicioPosts = retrofitDummy.create(PostApiService::class.java)
+    val servicioProductos = retrofitDummy.create(ProductApiService::class.java)
+    val servicioAnfibios = retrofitAnfibios.create(AmphibianApiService::class.java)
+
     val navController = rememberNavController()
 
     Scaffold(
         topBar = { BarraSuperior() },
         bottomBar = { BarraInferior(navController) },
-        // Pasamos ambos servicios al contenido
-        content = { paddingValues -> Contenido(paddingValues, navController, servicioPosts, servicioProductos) }
+        content = { paddingValues ->
+            Contenido(paddingValues, navController, servicioPosts, servicioProductos, servicioAnfibios)
+        }
     )
 }
 
@@ -103,21 +117,28 @@ fun BarraInferior(navController: NavHostController) {
             selected = navController.currentDestination?.route == "posts",
             onClick = { navController.navigate("posts") }
         )
-        // NUEVO BOTÓN DE PRODUCTOS
         NavigationBarItem(
             icon = { Icon(Icons.Filled.ShoppingCart, contentDescription = "Productos") },
             label = { Text("Productos") },
             selected = navController.currentDestination?.route == "productos",
             onClick = { navController.navigate("productos") }
         )
+        NavigationBarItem(
+            icon = { Icon(Icons.Filled.Pets, contentDescription = "Anfibios") },
+            label = { Text("Anfibios") },
+            selected = navController.currentDestination?.route == "anfibios",
+            onClick = { navController.navigate("anfibios") }
+        )
     }
 }
+
 @Composable
 fun Contenido(
     pv: PaddingValues,
     navController: NavHostController,
     servicioPosts: PostApiService,
-    servicioProductos: ProductApiService
+    servicioProductos: ProductApiService,
+    servicioAnfibios: AmphibianApiService
 ) {
     Box(
         modifier = Modifier.fillMaxSize().padding(pv)
@@ -130,6 +151,24 @@ fun Contenido(
             composable("posts") { ScreenPosts(navController, servicioPosts) }
             composable("productos") { ScreenProducts(servicioProductos, navController) }
             composable("carrito") { ScreenCart(navController) }
+            composable("anfibios") { ScreenAmphibians(servicioAnfibios, navController) }
+            // RUTA DE ANFIBIOS
+            composable("anfibioDetalle/{name}", arguments = listOf(
+                navArgument("name") { type = NavType.StringType }
+            )) { backStackEntry ->
+                val nombre = backStackEntry.arguments!!.getString("name")
+                // Como ya tenemos la lista en memoria, podemos buscar el anfibio por su nombre
+                // Para simplificar, haremos una llamada rápida al servicio
+                var anfibioSeleccionado by remember { mutableStateOf<AmphibianModel?>(null) }
+                LaunchedEffect(Unit) {
+                    val lista = servicioAnfibios.getAmphibians()
+                    anfibioSeleccionado = lista.find { it.name == nombre }
+                }
+                if (anfibioSeleccionado != null) {
+                    ScreenAmphibianDetail(anfibioSeleccionado!!, navController)
+                }
+            }
+
             composable("productoDetalle/{id}", arguments = listOf(
                 navArgument("id") { type = NavType.IntType }
             )) { backStackEntry ->
@@ -149,6 +188,8 @@ fun Contenido(
             )) {
                 ScreenPost(navController, servicioPosts, it.arguments!!.getInt("id"))
             }
+
+            composable("favoritos") { ScreenFavoritos(navController) }
         }
     }
 }
